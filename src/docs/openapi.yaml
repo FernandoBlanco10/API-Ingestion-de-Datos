@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: Data Ingestion API
+  description: API para ingesta de datos — proyecto de ingeniería de datos
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+
+paths:
+  /api/health:
+    get:
+      summary: Estado del servicio
+      tags: [Health]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                example:
+                  status: ok
+                  service: data-ingestion-api
+
+  /api/ingesta/datos:
+    post:
+      summary: Recibir una ingesta de venta/evento
+      tags: [Ingesta]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestPayload'
+      responses:
+        '201':
+          description: Ingesta recibida y persistida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  received_at:
+                    type: string
+                    format: date-time
+                  message:
+                    type: string
+                example:
+                  id: "b8d9f8c1-0000-4000-8000-123456789abc"
+                  received_at: "2025-12-08T12:34:56.789Z"
+                  message: "ingesta persistida"
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                        path:
+                          type: array
+        '500':
+          description: Error interno del servidor
+
+  /api/ingesta:
+    get:
+      summary: Listar ingestas (dev)
+      tags: [Ingesta]
+      responses:
+        '200':
+          description: Lista de ingestas en memoria / DB
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+components:
+  schemas:
+    IngestPayload:
+      type: object
+      required:
+        - folio
+        - monto
+        - fecha
+      properties:
+        folio:
+          type: string
+          example: "A123"
+        monto:
+          type: number
+          format: float
+          example: 950.5
+        fecha:
+          type: string
+          format: date
+          example: "2025-12-03"
+        cliente:
+          type: object
+          properties:
+            id:
+              type: string
+            nombre:
+              type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              cantidad:
+                type: integer
+              precio_unitario:
+                type: number
+                format: float
