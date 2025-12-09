@@ -1,17 +1,100 @@
 version: "3.8"
+
 services:
   db:
     image: postgres:15-alpine
     container_name: data_ingestion_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: data_ingestion
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
+      POSTGRES_DB: ${PGDATABASE:-data_ingestion}
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro   # opcional: ejecuta SQL al init
+    ports:
+      - "${PGPORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${PGUSER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data_ingestion_api
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3000}
+      # dentro del contenedor el host para Postgres es "db"
+      - PGHOST=db
+      - PGPORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  etl-server:
+    build:
+      context: ./etl-service
+      dockerfile: Dockerfile
+    container_name: etl_service
+    restart: unless-stopped
+    env_file:   
+      - ./.env
+    environment:
+      - NODE_ENV=production
+      - ETL_PORT=4000
+      - PGHOST=db
+      - PGPORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:4000/api/metricas"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  etl-worker:
+    build:
+      context: ./etl-service
+      dockerfile: Dockerfile
+    container_name: etl_worker
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - NODE_ENV=production
+      - PGHOST=db
+      - PGPORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["node", "src/worker.js"]
+
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    restart: unless-stopped
 
 volumes:
   db-data:
